@@ -6,17 +6,36 @@ $(document).ready(function () {
             success: function (data) {
                 $('#feed').empty();
                 data.forEach(tweet => {
-                    const tweetHtml = $(`
-            <div class="tweet">
-                <div class="tweet-header">
-                    ${tweet.avatar ? `<img src="/static/uploads/${tweet.avatar}" class="avatar-small">` : ''}
-                    <a href="/profile/${tweet.username}" class="username">${tweet.username}</a>
-                </div>
-                <div class="tweet-content">${tweet.content}</div>
-                <div class="timestamp">${new Date(tweet.timestamp).toLocaleString()}</div>
-            </div>
-        `);
-                    $('#feed').append(tweetHtml);
+                    const $tweet = $('<div>').addClass('tweet');
+                    const $header = $('<div>').addClass('tweet-header');
+                    if (tweet.avatar) {
+                        $header.append(
+                            $('<img>')
+                              .attr('src', '/static/uploads/' + tweet.avatar)
+                              .addClass('avatar-small')
+                        );
+                    }
+                    $header.append(
+                        $('<a>')
+                          .attr('href', '/profile/' + encodeURIComponent(tweet.username))
+                          .addClass('username')
+                          .text(tweet.username)
+                    );
+                    $tweet.append($header);
+
+                    $tweet.append(
+                        $('<div>')
+                          .addClass('tweet-content')
+                          .text(tweet.content)
+                    );
+
+                    $tweet.append(
+                        $('<div>')
+                          .addClass('timestamp')
+                          .text(new Date(tweet.timestamp).toLocaleString())
+                    );
+
+                    $('#feed').append($tweet);
                 });
             }
         });

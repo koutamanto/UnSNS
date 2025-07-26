@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>新規登録 - UnSNS</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='stytle.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header><div class="logo">UnSNS</div></header>
+    <header><div class="logo" onclick="location.href='/';">UnSNS</div></header>
     <main>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -21,6 +21,7 @@
             <h2>新規登録</h2>
             <input type="text" name="username" placeholder="ユーザー名" required>
             <input type="password" name="password" placeholder="パスワード" required>
+            <textarea name="bio" placeholder="自己紹介 (任意)" class="form-textarea"></textarea>
             <button type="submit">登録</button>
         </form>
         <p>アカウントをお持ちですか？ <a href="{{ url_for('login') }}">ログイン</a></p>

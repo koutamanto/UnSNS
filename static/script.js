@@ -1,24 +1,28 @@
-$(document).ready(function() {
+$(document).ready(function () {
     function loadTweets() {
         $.ajax({
             url: '/api/tweets',
             method: 'GET',
-            success: function(data) {
+            success: function (data) {
                 $('#feed').empty();
-                data.forEach(function(tweet) {
+                data.forEach(tweet => {
                     const tweetHtml = $(`
-                        <div class="tweet">
-                            <p>${tweet.content}</p>
-                            <div class="timestamp">${new Date(tweet.timestamp).toLocaleString()}</div>
-                        </div>
-                    `);
+            <div class="tweet">
+                <div class="tweet-header">
+                    ${tweet.avatar ? `<img src="/static/uploads/${tweet.avatar}" class="avatar-small">` : ''}
+                    <a href="/profile/${tweet.username}" class="username">${tweet.username}</a>
+                </div>
+                <div class="tweet-content">${tweet.content}</div>
+                <div class="timestamp">${new Date(tweet.timestamp).toLocaleString()}</div>
+            </div>
+        `);
                     $('#feed').append(tweetHtml);
                 });
             }
         });
     }
 
-    $('#tweet-button').click(function() {
+    $('#tweet-button').click(function () {
         const content = $('#tweet-content').val();
         if (!content.trim()) {
             alert('テキストを入力してください。');
@@ -29,11 +33,11 @@ $(document).ready(function() {
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({ content }),
-            success: function(tweet) {
+            success: function (tweet) {
                 $('#tweet-content').val('');
                 loadTweets();
             },
-            error: function() {
+            error: function () {
                 alert('投稿に失敗しました。');
             }
         });

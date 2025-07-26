@@ -4,6 +4,10 @@ from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import session, redirect, url_for, flash
+from functools import wraps
+from werkzeug.utils import secure_filename
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(BASE_DIR, 'db')
@@ -18,27 +22,64 @@ conn.execute('''
     CREATE TABLE IF NOT EXISTS tweets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
-        timestamp TEXT NOT NULL
+        timestamp TEXT NOT NULL,
+        user_id INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
     )
 ''')
 conn.commit()
+# Add avatar column if not present
 conn.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
+        password TEXT NOT NULL,
+        bio TEXT DEFAULT '',
+        avatar TEXT
     )
 ''')
 conn.commit()
+# Migrate tweets table to include user_id column if not present
+cursor = conn.execute("PRAGMA table_info(tweets)")
+existing_cols = [row[1] for row in cursor.fetchall()]
+if 'user_id' not in existing_cols:
+    conn.execute("ALTER TABLE tweets ADD COLUMN user_id INTEGER")
+    conn.commit()
+# Migrate users table to include bio column if not present
+cursor = conn.execute("PRAGMA table_info(users)")
+existing_user_cols = [row[1] for row in cursor.fetchall()]
+if 'bio' not in existing_user_cols:
+    conn.execute("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''")
+    conn.commit()
+# Migrate users table to include avatar column if not present
+if 'avatar' not in existing_user_cols:
+    conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+    conn.commit()
 conn.close()
 
+# Ensure uploads folder exists
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 def index():
@@ -48,16 +89,25 @@ def index():
 def get_tweets():
     conn = get_db_connection()
     rows = conn.execute(
-        'SELECT content, timestamp FROM tweets ORDER BY timestamp DESC'
+        'SELECT t.content, t.timestamp, u.username, u.avatar '
+        'FROM tweets t '
+        'LEFT JOIN users u ON t.user_id = u.id '
+        'ORDER BY t.timestamp DESC'
     ).fetchall()
     conn.close()
     tweets = [
-        {'content': row['content'], 'timestamp': row['timestamp']}
+        {
+            'content': row['content'],
+            'timestamp': row['timestamp'],
+            'username': row['username'] or '匿名',
+            'avatar': row['avatar']
+        }
         for row in rows
     ]
     return jsonify(tweets)
 
 @app.route('/api/tweets', methods=['POST'])
+@login_required
 def post_tweet():
     data = request.get_json()
     content = data.get('content', '').strip()
@@ -66,8 +116,8 @@ def post_tweet():
     timestamp = datetime.utcnow().isoformat() + 'Z'
     conn = get_db_connection()
     conn.execute(
-        'INSERT INTO tweets (content, timestamp) VALUES (?, ?)',
-        (content, timestamp)
+        'INSERT INTO tweets (content, timestamp, user_id) VALUES (?, ?, ?)',
+        (content, timestamp, session['user_id'])
     )
     conn.commit()
     conn.close()
@@ -78,13 +128,16 @@ def register():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
+        bio = request.form.get('bio', '').strip()
         if not username or not password:
             flash('ユーザー名とパスワードを入力してください。')
             return redirect(url_for('register'))
         conn = get_db_connection()
         try:
-            conn.execute('INSERT INTO users (username, password) VALUES (?, ?)',
-                         (username, generate_password_hash(password)))
+            conn.execute(
+                'INSERT INTO users (username, password, bio) VALUES (?, ?, ?)',
+                (username, generate_password_hash(password), bio)
+            )
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
@@ -118,5 +171,57 @@ def logout():
     flash('ログアウトしました。')
     return redirect(url_for('index'))
 
+@app.route('/profile/<username>', methods=['GET', 'POST'])
+def profile(username):
+    conn = get_db_connection()
+    if request.method == 'POST':
+        if session.get('username') == username:
+            bio = request.form.get('bio', '').strip()
+            conn.execute('UPDATE users SET bio = ? WHERE username = ?', (bio, username))
+            conn.commit()
+            flash('プロフィールを更新しました。')
+            return redirect(url_for('profile', username=username))
+        flash('権限がありません。')
+        return redirect(url_for('index'))
+    user_row = conn.execute('SELECT id, username, bio, avatar FROM users WHERE username = ?', (username,)).fetchone()
+    if not user_row:
+        conn.close()
+        return "ユーザーが見つかりません", 404
+    tweets_rows = conn.execute(
+        'SELECT content, timestamp FROM tweets WHERE user_id = ? ORDER BY timestamp DESC',
+        (user_row['id'],)
+    ).fetchall()
+    conn.close()
+    tweets = [{'content': r['content'], 'timestamp': r['timestamp']} for r in tweets_rows]
+    return render_template('profile.html', user={'username': user_row['username'], 'bio': user_row['bio'], 'avatar': user_row['avatar']}, tweets=tweets)
+
+
+# /home route: profile edit for logged-in user
+@app.route('/home', methods=['GET', 'POST'])
+@login_required
+def home():
+    conn = get_db_connection()
+    if request.method == 'POST':
+        avatar = request.files.get('avatar')
+        if avatar and allowed_file(avatar.filename):
+            filename = secure_filename(f"{session['user_id']}_{avatar.filename}")
+            avatar.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            conn.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, session['user_id']))
+        bio = request.form.get('bio', '').strip()
+        conn.execute(
+            'UPDATE users SET bio = ? WHERE id = ?',
+            (bio, session['user_id'])
+        )
+        conn.commit()
+        conn.close()
+        flash('プロフィールを更新しました。')
+        return redirect(url_for('home'))
+    user_row = conn.execute(
+        'SELECT username, bio, avatar FROM users WHERE id = ?',
+        (session['user_id'],)
+    ).fetchone()
+    conn.close()
+    return render_template('home.html', user={'username': user_row['username'], 'bio': user_row['bio'], 'avatar': user_row['avatar']})
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True, port=80)

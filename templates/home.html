@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ホーム - UnSNS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.href='/';">UnSNS</div>
+        <nav>
+            <a href="{{ url_for('home') }}">Home</a>
+            <a href="{{ url_for('profile', username=session.get('username')) }}">プロフィール</a>
+            <a href="{{ url_for('logout') }}">ログアウト</a>
+        </nav>
+    </header>
+    <main>
+        <section class="page-header">
+          <h2>ホーム</h2>
+        </section>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class="messages">
+              {% for message in messages %}
+                <li>{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        <section class="profile-edit">
+            <h3>プロフィール編集</h3>
+            <form action="{{ url_for('home') }}" method="post" class="profile-form" enctype="multipart/form-data">
+                <div class="avatar-edit">
+                  {% if user.avatar %}
+                    <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar">
+                  {% else %}
+                    <div class="avatar placeholder">アイコン</div>
+                  {% endif %}
+                  <label for="avatar">アイコン変更</label>
+                  <input type="file" name="avatar" accept="image/*">
+                </div>
+                <input type="text" name="bio" value="{{ user.bio }}" placeholder="自己紹介" />
+                <button type="submit">更新</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

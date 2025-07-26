@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ user.username }} のプロフィール - UnSNS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <div class="logo" onclick="location.href='/';">UnSNS</div>
+    <nav>
+      <a href="{{ url_for('home') }}">Home</a>
+      {% if session.get('user_id') %}
+        <span>{{ session.get('username') }} さん</span>
+        <a href="{{ url_for('logout') }}">ログアウト</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">ログイン</a>
+        <a href="{{ url_for('register') }}">新規登録</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    <section class="profile-info">
+      <div class="profile-header">
+        {% if user.avatar %}
+          <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar-small">
+        {% endif %}
+        <h2>{{ user.username }} さんのプロフィール</h2>
+      </div>
+      <p class="profile-bio">{{ user.bio }}</p>
+    </section>
+    {% if session.get('username') == user.username %}
+      <form action="{{ url_for('profile', username=user.username) }}" method="post" class="profile-form">
+        <input type="text" name="bio" value="{{ user.bio }}" placeholder="自己紹介" />
+        <button type="submit">更新</button>
+      </form>
+    {% endif %}
+    <section class="feed">
+      {% for tweet in tweets %}
+        <div class="tweet">
+          <div class="tweet-header">
+            <a href="{{ url_for('profile', username=tweet.username) }}" class="username">{{ tweet.username }}</a>
+          </div>
+          <div class="tweet-content">{{ tweet.content }}</div>
+          <div class="timestamp">{{ tweet.timestamp }}</div>
+        </div>
+      {% endfor %}
+    </section>
+  </main>
+</body>
+</html>

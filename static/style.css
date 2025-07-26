@@ -127,6 +127,7 @@ main {
   padding: 1rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
+  margin-bottom: 1rem;
 }
 .feed .tweet:hover {
   transform: translateY(-4px);
@@ -141,11 +142,11 @@ main {
 .feed .tweet-header .username {
   color: var(--primary);
   font-weight: 500;
-  font-size: 1rem;
+  font-size: 2rem;
   text-decoration: none;
 }
 .feed .tweet-content {
-  font-size: 1rem;
+  font-size: 2rem;
   line-height: 1.6;
   color: var(--text-primary);
   margin-bottom: 0.75rem;

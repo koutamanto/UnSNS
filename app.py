@@ -6,8 +6,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import session, redirect, url_for, flash
 from functools import wraps
 from werkzeug.utils import secure_filename
+import json
+from pywebpush import webpush, WebPushException
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_CLAIMS = {"sub": "mailto:your-email@example.com"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(BASE_DIR, 'db')
@@ -57,6 +63,19 @@ if 'avatar' not in existing_user_cols:
     conn.commit()
 conn.close()
 
+# Create subscriptions table
+conn = sqlite3.connect(DB_PATH)
+conn.execute('''
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL
+    )
+''')
+conn.commit()
+conn.close()
+
 # Ensure uploads folder exists
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -67,6 +86,25 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def send_push_notification(data):
+    conn = get_db_connection()
+    subs = conn.execute('SELECT endpoint, p256dh, auth FROM subscriptions').fetchall()
+    conn.close()
+    for s in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": s["endpoint"],
+                    "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}
+                },
+                data=json.dumps(data),
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_public_key=VAPID_PUBLIC_KEY,
+                vapid_claims=VAPID_CLAIMS
+            )
+        except WebPushException as ex:
+            print("Web push failed: {}", repr(ex))
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -120,6 +158,8 @@ def post_tweet():
         (content, timestamp, session['user_id'])
     )
     conn.commit()
+    # send browser push notification
+    send_push_notification({"title": "UnSNS", "body": content})
     conn.close()
     return jsonify({'content': content, 'timestamp': timestamp}), 201
 
@@ -222,6 +262,18 @@ def home():
     ).fetchone()
     conn.close()
     return render_template('home.html', user={'username': user_row['username'], 'bio': user_row['bio'], 'avatar': user_row['avatar']})
+
+@app.route('/subscribe', methods=['POST'])
+def subscribe():
+    sub = request.get_json()
+    conn = get_db_connection()
+    conn.execute(
+        'INSERT INTO subscriptions (endpoint, p256dh, auth) VALUES (?, ?, ?)',
+        (sub["endpoint"], sub["keys"]["p256dh"], sub["keys"]["auth"])
+    )
+    conn.commit()
+    conn.close()
+    return '', 201
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=80)

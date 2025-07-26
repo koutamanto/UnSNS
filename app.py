@@ -145,8 +145,9 @@ def get_tweets():
     return jsonify(tweets)
 
 @app.route('/api/tweets', methods=['POST'])
-@login_required
 def post_tweet():
+    if 'user_id' not in session:
+        return jsonify({'error': 'ログインが必要です'}), 401
     data = request.get_json()
     content = data.get('content', '').strip()
     if not content:

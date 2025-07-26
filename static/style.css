@@ -88,7 +88,7 @@ nav a:hover {
 }
 
 main {
-  max-width: 600px;
+  max-width: 800px;
   margin: 2rem auto;
   padding: 0 1rem;
   display: flex;
@@ -323,4 +323,88 @@ main > p {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.5rem 1rem;
+  }
+  nav {
+    width: 100%;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  main {
+    margin: 1.5rem auto;
+    padding: 0 0.5rem;
+  }
+  .compose, .auth-form, .profile-edit, .feed .tweet, .page-header, .profile-info {
+    width: 100%;
+    padding: 0.75rem;
+    box-shadow: none;
+  }
+  .compose textarea {
+    min-height: 80px;
+  }
+  .feed .tweet {
+    padding: 0.75rem;
+  }
+  .auth-form input, .profile-form input[type="text"], textarea {
+    font-size: 0.9rem;
+  }
+  .compose button, .auth-form button, .profile-form button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  header, nav {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  header .logo {
+    font-size: 1.25rem;
+  }
+  nav a, nav span {
+    margin-left: 0;
+    font-size: 0.85rem;
+  }
+  main {
+    margin: 1rem auto;
+    padding: 0 0.5rem;
+  }
+  .compose textarea {
+    min-height: 60px;
+  }
+  .feed .tweet {
+    padding: 0.5rem;
+    border-radius: 8px;
+  }
+  .feed .tweet-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  .avatar-small {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
+  .auth-form, .profile-edit {
+    padding: 1rem;
+  }
+  .auth-form h2 {
+    font-size: 1.25rem;
+  }
+  .auth-form input, .profile-form input[type="text"], textarea {
+    font-size: 0.85rem;
+  }
+  .compose button, .auth-form button, .profile-form button {
+    padding: 0.65rem;
+    font-size: 0.95rem;
+  }
 }

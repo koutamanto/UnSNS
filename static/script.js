@@ -57,7 +57,7 @@ $(document).ready(function () {
                 loadTweets();
             },
             error: function () {
-                alert('投稿に失敗しました。');
+                alert('投稿に失敗しました。ログインしているか確認してください。');
             }
         });
     });

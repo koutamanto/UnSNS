@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ログイン - UnSNS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='stytle.css') }}">
+</head>
+<body>
+    <header><div class="logo">UnSNS</div></header>
+    <main>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class="messages">
+              {% for message in messages %}
+                <li>{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        <form action="{{ url_for('login') }}" method="post" class="auth-form">
+            <h2>ログイン</h2>
+            <input type="text" name="username" placeholder="ユーザー名" required>
+            <input type="password" name="password" placeholder="パスワード" required>
+            <button type="submit">ログイン</button>
+        </form>
+        <p>アカウントがない方 <a href="{{ url_for('register') }}">新規登録</a></p>
+    </main>
+</body>
+</html>

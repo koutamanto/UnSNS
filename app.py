@@ -58,6 +58,12 @@ cols = [row[1] for row in cursor.fetchall()]
 if 'parent_id' not in cols:
     conn.execute("ALTER TABLE tweets ADD COLUMN parent_id INTEGER")
     conn.commit()
+# Migrate tweets table to include image column if not present
+cursor = conn.execute("PRAGMA table_info(tweets)")
+cols = [row[1] for row in cursor.fetchall()]
+if 'image' not in cols:
+    conn.execute("ALTER TABLE tweets ADD COLUMN image TEXT")
+    conn.commit()
 # Migrate users table to include bio column if not present
 cursor = conn.execute("PRAGMA table_info(users)")
 existing_user_cols = [row[1] for row in cursor.fetchall()]
@@ -148,7 +154,7 @@ def index():
 def get_tweets():
     conn = get_db_connection()
     rows = conn.execute('''
-        SELECT t.id, t.content, t.timestamp, t.parent_id,
+        SELECT t.id, t.content, t.timestamp, t.parent_id, t.image,
                u.username, u.avatar, 
                COUNT(l.id) AS like_count
         FROM tweets t
@@ -166,7 +172,8 @@ def get_tweets():
             'parent_id': row['parent_id'],
             'username': row['username'] or '匿名',
             'avatar': row['avatar'],
-            'like_count': row['like_count']
+            'like_count': row['like_count'],
+            'image': row['image']
         }
         for row in rows
     ]
@@ -176,22 +183,39 @@ def get_tweets():
 def post_tweet():
     if 'user_id' not in session:
         return jsonify({'error': 'ログインが必要です'}), 401
-    data = request.get_json()
-    content = data.get('content', '').strip()
+    if request.content_type.startswith('multipart/form-data'):
+        content = request.form.get('content','').strip()
+        image_file = request.files.get('image')
+        if image_file:
+            if image_file.mimetype.startswith('image/') and allowed_file(image_file.filename):
+                filename = secure_filename(f"{session['user_id']}_{int(datetime.utcnow().timestamp())}_{image_file.filename}")
+                image_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            else:
+                return jsonify({'error': '画像ファイルのみアップロード可能です'}), 400
+    else:
+        data = request.get_json()
+        content = data.get('content','').strip()
+        image_file = None
+        filename = None
     if not content:
         return jsonify({'error': 'Empty content'}), 400
-    parent_id = data.get('parent_id')
+    parent_id = request.form.get('parent_id') if request.content_type.startswith('multipart/form-data') else data.get('parent_id')
     timestamp = datetime.utcnow().isoformat() + 'Z'
+    if request.content_type.startswith('multipart/form-data'):
+        # filename already set above if image_file exists and valid
+        pass
+    else:
+        filename = None
     conn = get_db_connection()
     conn.execute(
-        'INSERT INTO tweets (content, timestamp, user_id, parent_id) VALUES (?, ?, ?, ?)',
-        (content, timestamp, session['user_id'], parent_id)
+        'INSERT INTO tweets (content, timestamp, user_id, parent_id, image) VALUES (?, ?, ?, ?, ?)',
+        (content, timestamp, session['user_id'], parent_id, filename)
     )
     conn.commit()
     # send browser push notification
     send_push_notification({"title": "UnSNS", "body": content})
     conn.close()
-    return jsonify({'content': content, 'timestamp': timestamp}), 201
+    return jsonify({'content': content, 'timestamp': timestamp, 'image': filename}), 201
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -273,10 +297,13 @@ def home():
     conn = get_db_connection()
     if request.method == 'POST':
         avatar = request.files.get('avatar')
-        if avatar and allowed_file(avatar.filename):
-            filename = secure_filename(f"{session['user_id']}_{avatar.filename}")
-            avatar.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            conn.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, session['user_id']))
+        if avatar:
+            if avatar.mimetype.startswith('image/') and allowed_file(avatar.filename):
+                filename = secure_filename(f"{session['user_id']}_{avatar.filename}")
+                avatar.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                conn.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, session['user_id']))
+            else:
+                flash('画像ファイルのみアップロード可能です。')
         bio = request.form.get('bio', '').strip()
         conn.execute(
             'UPDATE users SET bio = ? WHERE id = ?',

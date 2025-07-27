@@ -105,6 +105,67 @@ main {
   flex-direction: column;
   gap: 0.75rem;
 }
+.compose input[type="file"] {
+  display: block;
+  background: var(--card-bg);
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.compose input[type="file"]::-webkit-file-upload-button {
+  content: "画像";
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.compose input[type="file"]::file-selector-button {
+  content: "画像";
+}
+.compose input[type="file"]::-webkit-file-upload-button:hover {
+  background: var(--primary-dark);
+}
+
+/* Specific styling for tweet-image button */
+#tweet-image {
+  display: block;
+  background: var(--card-bg);
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+#tweet-image::-webkit-file-upload-button {
+  content: "画像";
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+#tweet-image::file-selector-button {
+  content: "画像";
+}
+#tweet-image::-webkit-file-upload-button:hover {
+  background: var(--primary-dark);
+}
+.tweet-image {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 0.75rem 0;
+}
 .compose button {
   align-self: flex-end;
   background-color: var(--primary);
@@ -306,7 +367,30 @@ main > p {
   cursor: pointer;
 }
 .avatar-edit input[type="file"] {
-  margin: 0;
+  background: var(--card-bg);
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.avatar-edit input[type="file"]::-webkit-file-upload-button {
+  content: "画像";
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.avatar-edit input[type="file"]::file-selector-button {
+  content: "画像";
+}
+.avatar-edit input[type="file"]::-webkit-file-upload-button:hover {
+  background: var(--primary-dark);
 }
 .profile-avatar {
   display: block;

@@ -31,6 +31,13 @@ $(document).ready(function () {
                         $header.append($('<a>').attr('href', '/profile/' + encodeURIComponent(tweet.username)).addClass('username').text(tweet.username));
                         $tweet.append($header);
                         $tweet.append($('<div>').addClass('tweet-content').text(tweet.content));
+                        if (tweet.image) {
+                            $tweet.append(
+                                $('<img>')
+                                  .attr('src', '/static/uploads/' + tweet.image)
+                                  .addClass('tweet-image')
+                            );
+                        }
                         const $footer = $('<div>').addClass('tweet-footer');
                         $footer.append($('<span>').addClass('timestamp').text(new Date(tweet.timestamp).toLocaleString()));
                         $footer.append($('<button>').addClass('reply-button').attr('data-id', tweet.id).text('返信'));
@@ -60,22 +67,35 @@ $(document).ready(function () {
     }
 
     $('#tweet-button').click(function () {
-        const content = $('#tweet-content').val();
-        if (!content.trim()) {
+        const content = $('#tweet-content').val().trim();
+        if (!content) {
             alert('テキストを入力してください。');
             return;
+        }
+        const formData = new FormData();
+        formData.append('content', content);
+        const fileInput = $('#tweet-image')[0];
+        if (fileInput && fileInput.files.length) {
+            const file = fileInput.files[0];
+            if (!file.type.startsWith('image/')) {
+                alert('画像ファイルを選択してください。');
+                return;
+            }
+            formData.append('image', file);
         }
         $.ajax({
             url: '/api/tweets',
             method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ content }),
+            data: formData,
+            processData: false,
+            contentType: false,
             success: function (tweet) {
                 $('#tweet-content').val('');
+                $('#tweet-image').val('');
                 loadTweets();
             },
             error: function () {
-                alert('投稿に失敗しました。ログインしているか確認してください。');
+                alert('投稿に失敗しました。ログインが必要です。');
             }
         });
     });

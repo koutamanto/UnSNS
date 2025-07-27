@@ -1,4 +1,7 @@
 $(document).ready(function () {
+    // Track tweets liked by current user in this session
+    let likedTweetIds = [];
+
     function buildThread(tweets) {
         const map = {}, roots = [];
         tweets.forEach(t => map[t.id] = {...t, replies: []});
@@ -31,7 +34,11 @@ $(document).ready(function () {
                         const $footer = $('<div>').addClass('tweet-footer');
                         $footer.append($('<span>').addClass('timestamp').text(new Date(tweet.timestamp).toLocaleString()));
                         $footer.append($('<button>').addClass('reply-button').attr('data-id', tweet.id).text('返信'));
-                        const $likeBtn = $('<button>').addClass('like-button').attr('data-id', tweet.id).text('❤️ ' + tweet.like_count);
+                        const heart = likedTweetIds.includes(tweet.id) ? '❤️' : '♡';
+                        const $likeBtn = $('<button>')
+                          .addClass('like-button')
+                          .attr('data-id', tweet.id)
+                          .text(heart + ' ' + tweet.like_count);
                         $footer.append($likeBtn);
                         if (tweet.username === window.CURRENT_USER) {
                             $footer.append(
@@ -91,22 +98,22 @@ $(document).ready(function () {
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({content, parent_id}),
-            success: () => loadTweets()
+            success: () => loadTweets(),
+            error: () => loadTweets()
         });
     });
 
     $('#feed').on('click', '.like-button', function(e) {
         const tweet_id = $(this).data('id');
         const $btn = $(this);
-        if (e.shiftKey) {
-            $.getJSON(`/api/tweets/${tweet_id}/likes`, function(data) {
-                alert('Liked by:\n' + data.map(u=>u.username).join('\n'));
-            });
-        } else {
-            $.post(`/api/tweets/${tweet_id}/likes`, function(res) {
-                $btn.text('❤️ ' + res.like_count);
-            }, 'json');
-        }
+        $.post(`/api/tweets/${tweet_id}/likes`, function(res) {
+            if (likedTweetIds.includes(tweet_id)) {
+                likedTweetIds = likedTweetIds.filter(id => id !== tweet_id);
+            } else {
+                likedTweetIds.push(tweet_id);
+            }
+            loadTweets();
+        }, 'json');
     });
 
     $('#feed').on('click', '.delete-button', function() {
@@ -120,6 +127,7 @@ $(document).ready(function () {
             },
             error: function() {
                 alert('削除に失敗しました。');
+                loadTweets();
             }
         });
     });

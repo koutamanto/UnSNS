@@ -359,4 +359,4 @@ def delete_tweet(tweet_id):
     return '', 204
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", debug=True, port=80)
+    app.run(host="0.0.0.0", debug=True, port=443, ssl_context=('ssl/cert.pem', 'ssl/privkey.key'))

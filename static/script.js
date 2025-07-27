@@ -34,7 +34,7 @@ $(document).ready(function () {
                         const $footer = $('<div>').addClass('tweet-footer');
                         $footer.append($('<span>').addClass('timestamp').text(new Date(tweet.timestamp).toLocaleString()));
                         $footer.append($('<button>').addClass('reply-button').attr('data-id', tweet.id).text('返信'));
-                        const heart = likedTweetIds.includes(tweet.id) ? '❤️' : '♡';
+                        const heart = likedTweetIds.includes(tweet.id) ? '♡' : '♡';
                         const $likeBtn = $('<button>')
                           .addClass('like-button')
                           .attr('data-id', tweet.id)

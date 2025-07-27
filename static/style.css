@@ -409,3 +409,49 @@ main > p {
     font-size: 0.95rem;
   }
 }
+
+/* Added styles for replies and likes */
+.tweet-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.reply-button, .like-button {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.reply-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.reply-content {
+  flex: 1;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+.submit-reply {
+  background-color: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Added styles for delete button */
+.delete-button {
+  background: none;
+  border: none;
+  color: #e0245e;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.delete-button:hover {
+  text-decoration: underline;
+}

@@ -30,6 +30,7 @@ conn.execute('''
         content TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         user_id INTEGER,
+        parent_id INTEGER,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
 ''')
@@ -51,6 +52,12 @@ existing_cols = [row[1] for row in cursor.fetchall()]
 if 'user_id' not in existing_cols:
     conn.execute("ALTER TABLE tweets ADD COLUMN user_id INTEGER")
     conn.commit()
+# Migrate tweets table to include parent_id column if not present
+cursor = conn.execute("PRAGMA table_info(tweets)")
+cols = [row[1] for row in cursor.fetchall()]
+if 'parent_id' not in cols:
+    conn.execute("ALTER TABLE tweets ADD COLUMN parent_id INTEGER")
+    conn.commit()
 # Migrate users table to include bio column if not present
 cursor = conn.execute("PRAGMA table_info(users)")
 existing_user_cols = [row[1] for row in cursor.fetchall()]
@@ -71,6 +78,20 @@ conn.execute('''
         endpoint TEXT NOT NULL,
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL
+    )
+''')
+conn.commit()
+conn.close()
+
+# Create tweet likes table
+conn = sqlite3.connect(DB_PATH)
+conn.execute('''
+    CREATE TABLE IF NOT EXISTS tweet_likes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tweet_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY(tweet_id) REFERENCES tweets(id),
+        FOREIGN KEY(user_id) REFERENCES users(id)
     )
 ''')
 conn.commit()
@@ -126,19 +147,26 @@ def index():
 @app.route('/api/tweets', methods=['GET'])
 def get_tweets():
     conn = get_db_connection()
-    rows = conn.execute(
-        'SELECT t.content, t.timestamp, u.username, u.avatar '
-        'FROM tweets t '
-        'LEFT JOIN users u ON t.user_id = u.id '
-        'ORDER BY t.timestamp DESC'
-    ).fetchall()
+    rows = conn.execute('''
+        SELECT t.id, t.content, t.timestamp, t.parent_id,
+               u.username, u.avatar, 
+               COUNT(l.id) AS like_count
+        FROM tweets t
+        LEFT JOIN users u ON t.user_id = u.id
+        LEFT JOIN tweet_likes l ON t.id = l.tweet_id
+        GROUP BY t.id
+        ORDER BY t.timestamp DESC
+    ''').fetchall()
     conn.close()
     tweets = [
         {
+            'id': row['id'],
             'content': row['content'],
             'timestamp': row['timestamp'],
+            'parent_id': row['parent_id'],
             'username': row['username'] or '匿名',
-            'avatar': row['avatar']
+            'avatar': row['avatar'],
+            'like_count': row['like_count']
         }
         for row in rows
     ]
@@ -152,11 +180,12 @@ def post_tweet():
     content = data.get('content', '').strip()
     if not content:
         return jsonify({'error': 'Empty content'}), 400
+    parent_id = data.get('parent_id')
     timestamp = datetime.utcnow().isoformat() + 'Z'
     conn = get_db_connection()
     conn.execute(
-        'INSERT INTO tweets (content, timestamp, user_id) VALUES (?, ?, ?)',
-        (content, timestamp, session['user_id'])
+        'INSERT INTO tweets (content, timestamp, user_id, parent_id) VALUES (?, ?, ?, ?)',
+        (content, timestamp, session['user_id'], parent_id)
     )
     conn.commit()
     # send browser push notification
@@ -275,6 +304,59 @@ def subscribe():
     conn.commit()
     conn.close()
     return '', 201
+
+@app.route('/api/tweets/<int:tweet_id>/likes', methods=['GET'])
+def get_likes(tweet_id):
+    conn = get_db_connection()
+    rows = conn.execute('''
+        SELECT u.username FROM tweet_likes tl
+        JOIN users u ON tl.user_id = u.id
+        WHERE tl.tweet_id = ?
+    ''', (tweet_id,)).fetchall()
+    conn.close()
+    return jsonify([{'username': r['username']} for r in rows])
+
+@app.route('/api/tweets/<int:tweet_id>/likes', methods=['POST'])
+def toggle_like(tweet_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'ログインが必要です'}), 401
+    user_id = session['user_id']
+    conn = get_db_connection()
+    existing = conn.execute(
+        'SELECT id FROM tweet_likes WHERE tweet_id = ? AND user_id = ?',
+        (tweet_id, user_id)
+    ).fetchone()
+    if existing:
+        conn.execute('DELETE FROM tweet_likes WHERE id = ?', (existing['id'],))
+    else:
+        conn.execute('INSERT INTO tweet_likes (tweet_id, user_id) VALUES (?, ?)', (tweet_id, user_id))
+    conn.commit()
+    # get new count
+    count = conn.execute(
+        'SELECT COUNT(*) AS cnt FROM tweet_likes WHERE tweet_id = ?',
+        (tweet_id,)
+    ).fetchone()['cnt']
+    conn.close()
+    return jsonify({'like_count': count})
+
+@app.route('/api/tweets/<int:tweet_id>', methods=['DELETE'])
+def delete_tweet(tweet_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'ログインが必要です'}), 401
+    conn = get_db_connection()
+    row = conn.execute(
+        'SELECT user_id FROM tweets WHERE id = ?', (tweet_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'error': '投稿が見つかりません'}), 404
+    if row['user_id'] != session['user_id']:
+        conn.close()
+        return jsonify({'error': '権限がありません'}), 403
+    conn.execute('DELETE FROM tweets WHERE id = ?', (tweet_id,))
+    conn.commit()
+    conn.close()
+    return '', 204
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=80)

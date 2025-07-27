@@ -35,6 +35,9 @@
             <!-- Tweets will be appended here -->
         </section>
     </main>
+    <script>
+      window.CURRENT_USER = "{{ session.get('username') or '' }}";
+    </script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
       if ('serviceWorker' in navigator) {

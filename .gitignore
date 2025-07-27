@@ -1,3 +1,4 @@
 db/tweets.db
 static/uploads/*
 ssl/*
+.vscode/*

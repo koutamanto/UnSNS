@@ -2,11 +2,53 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>新規登録 - UnSNS</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="theme-color" content="#1da1f2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
-    <header><div class="logo" onclick="location.href='/';">UnSNS</div></header>
+    <header>
+        <div class="logo" onclick="location.href='/';">UnSNS</div>
+        
+        <!-- デスクトップ用ナビゲーション -->
+        <nav>
+          <a href="{{ url_for('home') }}">Home</a>
+          {% if session.get('user_id') %}
+            <span>{{ session.get('username') }} さん</span>
+            <a href="{{ url_for('logout') }}">ログアウト</a>
+          {% else %}
+            <a href="{{ url_for('login') }}">ログイン</a>
+            <a href="{{ url_for('register') }}">新規登録</a>
+          {% endif %}
+        </nav>
+        
+        <!-- ハンバーガーメニューボタン -->
+        <button class="hamburger" id="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+    </header>
+    
+    <!-- オーバーレイ -->
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- モバイル用ナビゲーション -->
+    <nav class="mobile-nav" id="mobile-nav">
+        <a href="{{ url_for('home') }}">Home</a>
+        {% if session.get('user_id') %}
+          <span>{{ session.get('username') }} さん</span>
+          <a href="{{ url_for('logout') }}">ログアウト</a>
+        {% else %}
+          <a href="{{ url_for('login') }}">ログイン</a>
+          <a href="{{ url_for('register') }}">新規登録</a>
+        {% endif %}
+    </nav>
+    
     <main>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -17,14 +59,106 @@
             </ul>
           {% endif %}
         {% endwith %}
+        
         <form action="{{ url_for('register') }}" method="post" class="auth-form">
             <h2>新規登録</h2>
-            <input type="text" name="username" placeholder="ユーザー名" required>
-            <input type="password" name="password" placeholder="パスワード" required>
-            <textarea name="bio" placeholder="自己紹介 (任意)" class="form-textarea"></textarea>
+            <input type="text" name="username" placeholder="ユーザー名" required minlength="3" maxlength="20">
+            <input type="password" name="password" placeholder="パスワード" required minlength="6">
+            <input type="password" name="confirm_password" placeholder="パスワード確認" required minlength="6">
             <button type="submit">登録</button>
         </form>
-        <p>アカウントをお持ちですか？ <a href="{{ url_for('login') }}">ログイン</a></p>
+        
+        <p>すでにアカウントをお持ちですか？ <a href="{{ url_for('login') }}">ログイン</a></p>
     </main>
+    
+    <script>
+      // ハンバーガーメニューの制御
+      document.addEventListener('DOMContentLoaded', function() {
+        const hamburger = document.getElementById('hamburger');
+        const mobileNav = document.getElementById('mobile-nav');
+        const overlay = document.getElementById('overlay');
+        
+        function toggleMenu() {
+          hamburger.classList.toggle('active');
+          mobileNav.classList.toggle('active');
+          overlay.classList.toggle('active');
+          document.body.style.overflow = mobileNav.classList.contains('active') ? 'hidden' : '';
+        }
+        
+        function closeMenu() {
+          hamburger.classList.remove('active');
+          mobileNav.classList.remove('active');
+          overlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+        
+        hamburger.addEventListener('click', toggleMenu);
+        overlay.addEventListener('click', closeMenu);
+        
+        // モバイルナビのリンクをクリックしたらメニューを閉じる
+        mobileNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', closeMenu);
+        });
+        
+        // ウィンドウサイズが変更されたときの処理
+        window.addEventListener('resize', function() {
+          if (window.innerWidth > 768) {
+            closeMenu();
+          }
+        });
+        
+        // フォーム機能の向上
+        const authForm = document.querySelector('.auth-form');
+        const passwordField = authForm.querySelector('input[name="password"]');
+        const confirmPasswordField = authForm.querySelector('input[name="confirm_password"]');
+        const firstInput = authForm.querySelector('input[type="text"]');
+        
+        // ページロード時に最初の入力フィールドにフォーカス
+        if (firstInput) {
+          setTimeout(() => firstInput.focus(), 100);
+        }
+        
+        // パスワード確認のリアルタイムバリデーション
+        if (confirmPasswordField) {
+          confirmPasswordField.addEventListener('input', function() {
+            if (passwordField.value !== confirmPasswordField.value) {
+              confirmPasswordField.setCustomValidity('パスワードが一致しません');
+            } else {
+              confirmPasswordField.setCustomValidity('');
+            }
+          });
+          
+          passwordField.addEventListener('input', function() {
+            if (confirmPasswordField.value && passwordField.value !== confirmPasswordField.value) {
+              confirmPasswordField.setCustomValidity('パスワードが一致しません');
+            } else {
+              confirmPasswordField.setCustomValidity('');
+            }
+          });
+        }
+        
+        // Enterキーでの送信をスムーズに
+        authForm.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            const inputs = authForm.querySelectorAll('input');
+            const currentIndex = Array.from(inputs).indexOf(document.activeElement);
+            
+            if (currentIndex < inputs.length - 1) {
+              e.preventDefault();
+              inputs[currentIndex + 1].focus();
+            }
+          }
+        });
+        
+        // フォーム送信前の最終チェック
+        authForm.addEventListener('submit', function(e) {
+          if (passwordField.value !== confirmPasswordField.value) {
+            e.preventDefault();
+            alert('パスワードが一致しません');
+            confirmPasswordField.focus();
+          }
+        });
+      });
+    </script>
 </body>
 </html>

@@ -2,5 +2,6 @@ db/tweets.db
 static/uploads/*
 ssl/*
 .vscode/*
-*.pem
+vapid_private.pem
+vapid_public.pem
 nohup.out

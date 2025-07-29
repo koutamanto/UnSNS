@@ -52,6 +52,27 @@ conn.execute('''
     )
 ''')
 conn.commit()
+
+cursor = conn.execute("PRAGMA table_info(users)")
+existing_user_cols = [row[1] for row in cursor.fetchall()]
+
+badge_columns = ['is_developer', 'is_verified', 'is_premium', 'join_date']
+for col in badge_columns:
+    if col not in existing_user_cols:
+        if col == 'join_date':
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        else:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER DEFAULT 0")
+        conn.commit()
+
+developer_usernames = ['pik6c', 'KOUTA']
+for username in developer_usernames:
+    conn.execute(
+        'UPDATE users SET is_developer = 1 WHERE username = ?',
+        (username,)
+    )
+    conn.commit()
+
 # Migrate tweets table to include user_id column if not present
 cursor = conn.execute("PRAGMA table_info(tweets)")
 existing_cols = [row[1] for row in cursor.fetchall()]
@@ -76,6 +97,8 @@ existing_user_cols = [row[1] for row in cursor.fetchall()]
 if 'bio' not in existing_user_cols:
     conn.execute("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''")
     conn.commit()
+
+
 # Migrate users table to include avatar column if not present
 if 'avatar' not in existing_user_cols:
     conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
@@ -261,17 +284,35 @@ def post_tweet():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        conn = get_db_connection()
         username = request.form['username'].strip()
         password = request.form['password']
         bio = request.form.get('bio', '').strip()
+        join_date = datetime.utcnow().strftime('%Y-%m-%d')  # 参加日を記録
+
+        cursor = conn.execute('SELECT * FROM users')
+        user_id = len(cursor.fetchall()) + 1
+
+        avatar = request.files.get('avatar')
+        if avatar:
+            if avatar.mimetype.startswith('image/') and allowed_file(avatar.filename):
+                filename = secure_filename(f"{user_id}_{avatar.filename}")
+                avatar.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                #conn.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, session['user_id']))
+            else:
+                flash('画像ファイルのみアップロード可能です。')
+        else:
+            filename = secure_filename(f"default.png")
+
+        
         if not username or not password:
             flash('ユーザー名とパスワードを入力してください。')
             return redirect(url_for('register'))
-        conn = get_db_connection()
+            
         try:
             conn.execute(
-                'INSERT INTO users (username, password, bio) VALUES (?, ?, ?)',
-                (username, generate_password_hash(password), bio)
+                'INSERT INTO users (username, password, bio, join_date, avatar) VALUES (?, ?, ?, ?, ?)',
+                (username, generate_password_hash(password), bio, join_date, filename)
             )
             conn.commit()
         except sqlite3.IntegrityError:
@@ -300,11 +341,14 @@ def login():
         return redirect(url_for('login'))
     return render_template('login.html')
 
+
+
 @app.route('/logout')
 def logout():
     session.clear()
     flash('ログアウトしました。')
     return redirect(url_for('index'))
+
 
 @app.route('/profile/<username>', methods=['GET', 'POST'])
 def profile(username):
@@ -318,17 +362,49 @@ def profile(username):
             return redirect(url_for('profile', username=username))
         flash('権限がありません。')
         return redirect(url_for('index'))
-    user_row = conn.execute('SELECT id, username, bio, avatar FROM users WHERE username = ?', (username,)).fetchone()
+
+    # ユーザー情報とバッジ情報を取得
+    user_row = conn.execute('''
+        SELECT id, username, bio, avatar, is_developer, is_verified, is_premium, join_date
+        FROM users WHERE username = ?
+    ''', (username,)).fetchone()
+
     if not user_row:
         conn.close()
         return "ユーザーが見つかりません", 404
-    tweets_rows = conn.execute(
-        'SELECT content, timestamp FROM tweets WHERE user_id = ? ORDER BY timestamp DESC',
-        (user_row['id'],)
-    ).fetchall()
+
+    # ユーザーの投稿を取得（画像情報も含む）
+    tweets_rows = conn.execute('''
+        SELECT content, timestamp, image
+        FROM tweets
+        WHERE user_id = ?
+        ORDER BY timestamp DESC
+    ''', (user_row['id'],)).fetchall()
+
     conn.close()
-    tweets = [{'content': r['content'], 'timestamp': r['timestamp']} for r in tweets_rows]
-    return render_template('profile.html', user={'username': user_row['username'], 'bio': user_row['bio'], 'avatar': user_row['avatar']}, tweets=tweets)
+
+    # ユーザー情報をまとめる
+    user_info = {
+        'username': user_row['username'],
+        'bio': user_row['bio'],
+        'avatar': user_row['avatar'],
+        'is_developer': bool(user_row['is_developer']),
+        'is_verified': bool(user_row['is_verified']),
+        'is_premium': bool(user_row['is_premium']),
+        'join_date': user_row['join_date']
+    }
+
+    tweets = [
+        {
+            'content': r['content'],
+            'timestamp': r['timestamp'],
+            'image': r['image']
+        }
+        for r in tweets_rows
+    ]
+
+    return render_template('profile.html', user=user_info, tweets=tweets)
+
 
 
 # /home route: profile edit for logged-in user
@@ -354,12 +430,58 @@ def home():
         conn.close()
         flash('プロフィールを更新しました。')
         return redirect(url_for('home'))
-    user_row = conn.execute(
-        'SELECT username, bio, avatar FROM users WHERE id = ?',
+
+    user_row = conn.execute('''
+        SELECT username, bio, avatar, is_developer, is_verified, is_premium
+        FROM users WHERE id = ?
+    ''', (session['user_id'],)).fetchone()
+
+    conn.close()
+
+    user_info = {
+        'username': user_row['username'],
+        'bio': user_row['bio'],
+        'avatar': user_row['avatar'],
+        'is_developer': bool(user_row['is_developer']) if user_row['is_developer'] else False,
+        'is_verified': bool(user_row['is_verified']) if user_row['is_verified'] else False,
+        'is_premium': bool(user_row['is_premium']) if user_row['is_premium'] else False
+    }
+
+    return render_template('home.html', user=user_info)
+
+@app.route('/admin/badges/<username>', methods=['POST'])
+@login_required
+def manage_badges(username):
+    # 管理者権限チェック（開発者のみ）
+    conn = get_db_connection()
+    admin_user = conn.execute(
+        'SELECT is_developer FROM users WHERE id = ?',
         (session['user_id'],)
     ).fetchone()
+
+    if not admin_user or not admin_user['is_developer']:
+        conn.close()
+        return jsonify({'error': '権限がありません'}), 403
+
+    data = request.get_json()
+    badge_type = data.get('badge_type')  # 'developer', 'verified', 'premium'
+    action = data.get('action')  # 'grant' or 'revoke'
+
+    if badge_type not in ['developer', 'verified', 'premium']:
+        return jsonify({'error': '無効なバッジタイプです'}), 400
+
+    column_name = f'is_{badge_type}'
+    value = 1 if action == 'grant' else 0
+
+    conn.execute(
+        f'UPDATE users SET {column_name} = ? WHERE username = ?',
+        (value, username)
+    )
+    conn.commit()
     conn.close()
-    return render_template('home.html', user={'username': user_row['username'], 'bio': user_row['bio'], 'avatar': user_row['avatar']})
+
+    return jsonify({'success': True, 'message': f'{badge_type}バッジを{"付与" if action == "grant" else "削除"}しました'})
+
 
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
@@ -434,3 +556,4 @@ def delete_tweet(tweet_id):
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=443, ssl_context=('ssl/cert.pem', 'ssl/privkey.key'))
+

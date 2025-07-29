@@ -2,22 +2,52 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>ホーム - UnSNS</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#1da1f2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 </head>
 <body>
     <header>
         <div class="logo" onclick="location.href='/';">UnSNS</div>
+        
+        <!-- デスクトップ用ナビゲーション -->
         <nav>
             <a href="{{ url_for('home') }}">Home</a>
             <a href="{{ url_for('profile', username=session.get('username')) }}">プロフィール</a>
+            <span>{{ session.get('username') }} さん</span>
             <a href="{{ url_for('logout') }}">ログアウト</a>
         </nav>
+        
+        <!-- ハンバーガーメニューボタン -->
+        <button class="hamburger" id="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
     </header>
+    
+    <!-- オーバーレイ -->
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- モバイル用ナビゲーション -->
+    <nav class="mobile-nav" id="mobile-nav">
+        <a href="{{ url_for('home') }}">Home</a>
+        <a href="{{ url_for('profile', username=session.get('username')) }}">プロフィール</a>
+        <span>{{ session.get('username') }} さん</span>
+        <a href="{{ url_for('logout') }}">ログアウト</a>
+    </nav>
+    
     <main>
         <section class="page-header">
           <h2>ホーム</h2>
         </section>
+        
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             <ul class="messages">
@@ -27,22 +57,187 @@
             </ul>
           {% endif %}
         {% endwith %}
+        
         <section class="profile-edit">
             <h3>プロフィール編集</h3>
-            <form action="{{ url_for('home') }}" method="post" class="profile-form" enctype="multipart/form-data">
+            <form action="{{ url_for('home') }}" method="post" class="profile-form" enctype="multipart/form-data" id="profile-form">
                 <div class="avatar-edit">
                   {% if user.avatar %}
-                    <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar">
+                    <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar" id="avatar-preview">
                   {% else %}
-                    <div class="avatar placeholder">アイコン</div>
+                    <div class="avatar placeholder" id="avatar-preview">アイコン</div>
                   {% endif %}
-                  <label for="avatar">アイコン変更</label>
-                  <input type="file" name="avatar" accept="image/*">
+                  <div>
+                    <label for="avatar">アイコン変更</label>
+                    <input type="file" name="avatar" id="avatar-input" accept="image/*">
+                  </div>
                 </div>
-                <input type="text" name="bio" value="{{ user.bio }}" placeholder="自己紹介" />
+                <input type="text" name="bio" value="{{ user.bio or '' }}" placeholder="自己紹介を入力してください..." maxlength="160" id="bio-input" />
+                <div class="character-count">
+                  <span id="char-count">{{ (user.bio or '')|length }}</span>/160
+                </div>
                 <button type="submit">更新</button>
             </form>
         </section>
     </main>
+    
+    <script>
+      // ハンバーガーメニューの制御
+      document.addEventListener('DOMContentLoaded', function() {
+        const hamburger = document.getElementById('hamburger');
+        const mobileNav = document.getElementById('mobile-nav');
+        const overlay = document.getElementById('overlay');
+        
+        function toggleMenu() {
+          hamburger.classList.toggle('active');
+          mobileNav.classList.toggle('active');
+          overlay.classList.toggle('active');
+          document.body.style.overflow = mobileNav.classList.contains('active') ? 'hidden' : '';
+        }
+        
+        function closeMenu() {
+          hamburger.classList.remove('active');
+          mobileNav.classList.remove('active');
+          overlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+        
+        hamburger.addEventListener('click', toggleMenu);
+        overlay.addEventListener('click', closeMenu);
+        
+        // モバイルナビのリンクをクリックしたらメニューを閉じる
+        mobileNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', closeMenu);
+        });
+        
+        // ウィンドウサイズが変更されたときの処理
+        window.addEventListener('resize', function() {
+          if (window.innerWidth > 768) {
+            closeMenu();
+          }
+        });
+        
+        // プロフィール編集機能の強化
+        const avatarInput = document.getElementById('avatar-input');
+        const avatarPreview = document.getElementById('avatar-preview');
+        const bioInput = document.getElementById('bio-input');
+        const charCount = document.getElementById('char-count');
+        const profileForm = document.getElementById('profile-form');
+        
+        // アバター画像のプレビュー機能
+        if (avatarInput) {
+          avatarInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+              // ファイルサイズチェック（5MB制限）
+              if (file.size > 5 * 1024 * 1024) {
+                alert('ファイルサイズは5MB以下にしてください');
+                avatarInput.value = '';
+                return;
+              }
+              
+              // 画像ファイルかチェック
+              if (!file.type.startsWith('image/')) {
+                alert('画像ファイルを選択してください');
+                avatarInput.value = '';
+                return;
+              }
+              
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                // プレビュー表示
+                if (avatarPreview.tagName === 'IMG') {
+                  avatarPreview.src = e.target.result;
+                } else {
+                  // placeholderの場合は新しいimg要素を作成
+                  const newImg = document.createElement('img');
+                  newImg.src = e.target.result;
+                  newImg.className = 'avatar';
+                  newImg.id = 'avatar-preview';
+                  newImg.style.objectFit = 'cover';
+                  newImg.style.objectPosition = 'center';
+                  avatarPreview.parentNode.replaceChild(newImg, avatarPreview);
+                }
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+        }
+        
+        // 文字数カウント機能
+        if (bioInput && charCount) {
+          bioInput.addEventListener('input', function() {
+            const currentLength = bioInput.value.length;
+            charCount.textContent = currentLength;
+            
+            // 文字数による色変更
+            const countElement = charCount.parentElement;
+            if (currentLength > 140) {
+              countElement.style.color = '#e0245e';
+            } else if (currentLength > 120) {
+              countElement.style.color = '#ff8c00';
+            } else {
+              countElement.style.color = '#657786';
+            }
+          });
+        }
+        
+        // フォーム送信時の確認
+        if (profileForm) {
+          profileForm.addEventListener('submit', function(e) {
+            const bioValue = bioInput.value.trim();
+            const avatarFile = avatarInput.files[0];
+            
+            // 変更があるかチェック
+            const originalBio = "{{ user.bio or '' }}";
+            const hasChanges = bioValue !== originalBio || avatarFile;
+            
+            if (!hasChanges) {
+              e.preventDefault();
+              alert('変更がありません');
+              return;
+            }
+            
+            // 送信ボタンを無効化（重複送信防止）
+            const submitButton = profileForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.textContent = '更新中...';
+            
+            // 3秒後に元に戻す（エラー時のため）
+            setTimeout(() => {
+              submitButton.disabled = false;
+              submitButton.textContent = '更新';
+            }, 3000);
+          });
+        }
+        
+        // ドラッグ&ドロップでの画像アップロード
+        const avatarEditDiv = document.querySelector('.avatar-edit');
+        if (avatarEditDiv) {
+          avatarEditDiv.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            avatarEditDiv.style.backgroundColor = '#f0f8ff';
+          });
+          
+          avatarEditDiv.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            avatarEditDiv.style.backgroundColor = '';
+          });
+          
+          avatarEditDiv.addEventListener('drop', function(e) {
+            e.preventDefault();
+            avatarEditDiv.style.backgroundColor = '';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+              avatarInput.files = files;
+              // change イベントを手動で発火
+              const event = new Event('change', { bubbles: true });
+              avatarInput.dispatchEvent(event);
+            }
+          });
+        }
+      });
+    </script>
 </body>
 </html>

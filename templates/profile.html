@@ -16,6 +16,8 @@
 <body>
   <header>
     <div class="logo" onclick="location.href='/';">UnSNS</div>
+    
+    <!-- デスクトップ用ナビゲーション -->
     <nav>
       <a href="{{ url_for('home') }}">Home</a>
       {% if session.get('user_id') %}
@@ -26,7 +28,30 @@
         <a href="{{ url_for('register') }}">新規登録</a>
       {% endif %}
     </nav>
+    
+    <!-- ハンバーガーメニューボタン -->
+    <button class="hamburger" id="hamburger">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
   </header>
+  
+  <!-- オーバーレイ -->
+  <div class="overlay" id="overlay"></div>
+  
+  <!-- モバイル用ナビゲーション -->
+  <nav class="mobile-nav" id="mobile-nav">
+    <a href="{{ url_for('home') }}">Home</a>
+    {% if session.get('user_id') %}
+      <span>{{ session.get('username') }} さん</span>
+      <a href="{{ url_for('logout') }}">ログアウト</a>
+    {% else %}
+      <a href="{{ url_for('login') }}">ログイン</a>
+      <a href="{{ url_for('register') }}">新規登録</a>
+    {% endif %}
+  </nav>
+  
   <main>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -37,42 +62,199 @@
         </ul>
       {% endif %}
     {% endwith %}
+    
     <section class="profile-info">
       <div class="profile-header">
-        {% if user.avatar %}
-          <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar-small">
-        {% endif %}
-        <h2>{{ user.username }} さんのプロフィール</h2>
-      </div>
-      <p class="profile-bio">{{ user.bio }}</p>
-    </section>
-    {% if session.get('username') == user.username %}
-      <form action="{{ url_for('profile', username=user.username) }}" method="post" class="profile-form">
-        <input type="text" name="bio" value="{{ user.bio }}" placeholder="自己紹介" />
-        <button type="submit">更新</button>
-      </form>
-    {% endif %}
-    <section class="feed">
-      {% for tweet in tweets %}
-        <div class="tweet">
-          <div class="tweet-header">
-            {% if tweet.avatar %}
-              <img src="{{ url_for('static', filename='uploads/' + tweet.avatar) }}" class="avatar-small">
-            {% endif %}
-            <a href="{{ url_for('profile', username=tweet.username|urlencode) }}" class="username">{{ tweet.username | e }}</a>
-          </div>
-          <div class="tweet-content">{{ tweet.content | e }}</div>
-          {% if tweet.image %}
-            <img src="{{ url_for('static', filename='uploads/' + tweet.image) }}" class="tweet-image">
+        <div class="profile-avatar-section">
+          {% if user.avatar %}
+            <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar">
+          {% else %}
+            <div class="avatar placeholder">アイコン</div>
           {% endif %}
-          <div class="timestamp">{{ tweet.timestamp | e }}</div>
         </div>
-      {% endfor %}
+        
+        <div class="profile-details">
+          <div class="username-with-badges">
+            <h2>{{ user.username }} さんのプロフィール</h2>
+            <div class="badges">
+              {% if user.is_developer %}
+                <div class="badge developer-badge" title="開発者">
+                  <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="開発者" class="badge-icon">
+                  <span class="badge-text">開発者</span>
+                </div>
+              {% endif %}
+              {% if user.is_verified %}
+                <div class="badge verified-badge" title="認証済み">
+                  <span class="badge-icon">✓</span>
+                  <span class="badge-text">認証済み</span>
+                </div>
+              {% endif %}
+              {% if user.is_premium %}
+                <div class="badge premium-badge" title="プレミアム">
+                  <span class="badge-icon">★</span>
+                  <span class="badge-text">プレミアム</span>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          
+          {% if user.bio %}
+            <p class="profile-bio">{{ user.bio }}</p>
+          {% else %}
+            <p class="profile-bio no-bio">自己紹介が設定されていません</p>
+          {% endif %}
+          
+          <div class="profile-stats">
+            <div class="stat-item">
+              <span class="stat-number">{{ tweets|length }}</span>
+              <span class="stat-label">投稿</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ user.join_date or '不明' }}</span>
+              <span class="stat-label">参加日</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    {% if session.get('username') == user.username %}
+      <section class="profile-edit-quick">
+        <h3>クイック編集</h3>
+        <form action="{{ url_for('profile', username=user.username) }}" method="post" class="profile-form">
+          <div class="form-group">
+            <label for="bio">自己紹介</label>
+            <textarea name="bio" id="bio" placeholder="自己紹介を入力してください..." maxlength="160">{{ user.bio or '' }}</textarea>
+            <div class="character-count">
+              <span id="char-count">{{ (user.bio or '')|length }}</span>/160
+            </div>
+          </div>
+          <button type="submit">更新</button>
+        </form>
+      </section>
+    {% endif %}
+    
+    <section class="feed">
+      <div class="feed-header">
+        <h3>{{ user.username }} さんの投稿</h3>
+      </div>
+      
+      {% if tweets %}
+        {% for tweet in tweets %}
+          <div class="tweet">
+            <div class="tweet-header">
+              {% if user.avatar %}
+                <img src="{{ url_for('static', filename='uploads/' + user.avatar) }}" class="avatar-small">
+              {% else %}
+                <div class="avatar-small placeholder">アイコン</div>
+              {% endif %}
+              
+              <div class="tweet-user-info">
+                <a href="{{ url_for('profile', username=user.username|urlencode) }}" class="username">
+                  {{ user.username }}
+                  {% if user.is_developer %}
+                    <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="開発者" class="inline-badge">
+                  {% endif %}
+                  {% if user.is_verified %}
+                    <span class="inline-badge verified">✓</span>
+                  {% endif %}
+                </a>
+              </div>
+            </div>
+            
+            <div class="tweet-content">{{ tweet.content | e }}</div>
+            
+            {% if tweet.image %}
+              <img src="{{ url_for('static', filename='uploads/' + tweet.image) }}" class="tweet-image" loading="lazy">
+            {% endif %}
+            
+            <div class="tweet-footer">
+              <div class="timestamp">{{ tweet.timestamp | e }}</div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="no-tweets">
+          <p>まだ投稿がありません</p>
+          {% if session.get('username') == user.username %}
+            <a href="{{ url_for('index') }}" class="primary-link">最初の投稿をしてみましょう！</a>
+          {% endif %}
+        </div>
+      {% endif %}
     </section>
   </main>
 
   <script>
     window.CURRENT_USER = "{{ session.get('username') or '' }}";
+    
+    // ハンバーガーメニューの制御
+    document.addEventListener('DOMContentLoaded', function() {
+      const hamburger = document.getElementById('hamburger');
+      const mobileNav = document.getElementById('mobile-nav');
+      const overlay = document.getElementById('overlay');
+      
+      function toggleMenu() {
+        hamburger.classList.toggle('active');
+        mobileNav.classList.toggle('active');
+        overlay.classList.toggle('active');
+        document.body.style.overflow = mobileNav.classList.contains('active') ? 'hidden' : '';
+      }
+      
+      function closeMenu() {
+        hamburger.classList.remove('active');
+        mobileNav.classList.remove('active');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+      
+      hamburger.addEventListener('click', toggleMenu);
+      overlay.addEventListener('click', closeMenu);
+      
+      // モバイルナビのリンクをクリックしたらメニューを閉じる
+      mobileNav.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', closeMenu);
+      });
+      
+      // ウィンドウサイズが変更されたときの処理
+      window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+          closeMenu();
+        }
+      });
+      
+      // 自己紹介の文字数カウント
+      const bioTextarea = document.getElementById('bio');
+      const charCount = document.getElementById('char-count');
+      
+      if (bioTextarea && charCount) {
+        bioTextarea.addEventListener('input', function() {
+          const currentLength = bioTextarea.value.length;
+          charCount.textContent = currentLength;
+          
+          // 文字数による色変更
+          const countElement = charCount.parentElement;
+          if (currentLength > 140) {
+            countElement.style.color = '#e0245e';
+          } else if (currentLength > 120) {
+            countElement.style.color = '#ff8c00';
+          } else {
+            countElement.style.color = '#657786';
+          }
+        });
+      }
+      
+      // バッジのホバーエフェクト
+      const badges = document.querySelectorAll('.badge');
+      badges.forEach(badge => {
+        badge.addEventListener('mouseenter', function() {
+          this.style.transform = 'scale(1.05)';
+        });
+        
+        badge.addEventListener('mouseleave', function() {
+          this.style.transform = 'scale(1)';
+        });
+      });
+    });
   </script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
   <script>
@@ -85,3 +267,4 @@
   </script>
 </body>
 </html>
+

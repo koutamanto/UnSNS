@@ -20,6 +20,8 @@
 <body>
     <header>
         <div class="logo" onclick="location.href='/';">UnSNS</div>
+        
+        <!-- デスクトップ用ナビゲーション -->
         <nav>
           <a href="{{ url_for('home') }}">Home</a>
           {% if session.get('user_id') %}
@@ -30,7 +32,30 @@
             <a href="{{ url_for('register') }}">新規登録</a>
           {% endif %}
         </nav>
-      </header>
+        
+        <!-- ハンバーガーメニューボタン -->
+        <button class="hamburger" id="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+    </header>
+    
+    <!-- オーバーレイ -->
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- モバイル用ナビゲーション -->
+    <nav class="mobile-nav" id="mobile-nav">
+        <a href="{{ url_for('home') }}">Home</a>
+        {% if session.get('user_id') %}
+          <span>{{ session.get('username') }} さん</span>
+          <a href="{{ url_for('logout') }}">ログアウト</a>
+        {% else %}
+          <a href="{{ url_for('login') }}">ログイン</a>
+          <a href="{{ url_for('register') }}">新規登録</a>
+        {% endif %}
+    </nav>
+    
     <main>
         <section class="compose">
             <textarea id="tweet-content" placeholder="いまどうしてる？"></textarea>
@@ -42,6 +67,7 @@
             <!-- Tweets will be appended here -->
         </section>
     </main>
+    
     <script>
       window.CURRENT_USER = "{{ session.get('username') or '' }}";
     </script>
@@ -53,6 +79,42 @@
             .catch(err => console.error('ServiceWorker registration failed:', err));
         });
       }
+      
+      // ハンバーガーメニューの制御
+      document.addEventListener('DOMContentLoaded', function() {
+        const hamburger = document.getElementById('hamburger');
+        const mobileNav = document.getElementById('mobile-nav');
+        const overlay = document.getElementById('overlay');
+        
+        function toggleMenu() {
+          hamburger.classList.toggle('active');
+          mobileNav.classList.toggle('active');
+          overlay.classList.toggle('active');
+          document.body.style.overflow = mobileNav.classList.contains('active') ? 'hidden' : '';
+        }
+        
+        function closeMenu() {
+          hamburger.classList.remove('active');
+          mobileNav.classList.remove('active');
+          overlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+        
+        hamburger.addEventListener('click', toggleMenu);
+        overlay.addEventListener('click', closeMenu);
+        
+        // モバイルナビのリンクをクリックしたらメニューを閉じる
+        mobileNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', closeMenu);
+        });
+        
+        // ウィンドウサイズが変更されたときの処理
+        window.addEventListener('resize', function() {
+          if (window.innerWidth > 768) {
+            closeMenu();
+          }
+        });
+      });
     </script>
 </body>
 </html>

@@ -1,3 +1,53 @@
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  if (outputArray.length === 64) {
+    const uncompressed = new Uint8Array(65);
+    uncompressed[0] = 0x04;
+    uncompressed.set(outputArray, 1);
+    return uncompressed;
+  }
+  return outputArray;
+}
+  
+  async function askNotificationPermission() {
+    const result = await window.Notification.requestPermission();
+    if (result !== 'granted') {
+      alert('通知を許可しないとプッシュ通知は届きません');
+      return false;
+    }
+    return true;
+  }
+  
+  async function subscribePush() {
+    // try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    const subscription = await registrations[0].pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    // alert(subscription);
+    // サーバーへ購読情報を送信
+    fetch('/subscribe', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(subscription)
+    });
+    console.log('Subscribed to push notifications');
+    // } catch (error) {
+    //   console.error('Failed to subscribe to push notifications', error);
+    // }
+  }
+
 $(document).ready(function () {
     // Track tweets liked by current user in this session
     let likedTweetIds = [];
@@ -102,13 +152,19 @@ $(document).ready(function () {
 
     $('#feed').on('click', '.reply-button', function() {
         const id = $(this).data('id');
-        const $form = $(`
-            <div class="reply-form">
-              <input type="text" class="reply-content" placeholder="返信を入力"/>
-              <button class="submit-reply" data-id="${id}">送信</button>
-            </div>
-        `);
-        $(this).closest('.tweet').append($form);
+        const $tweet = $(this).closest('.tweet');
+        const existing = $tweet.find('.reply-form');
+        if (existing.length) {
+            existing.remove();
+        } else {
+            const $form = $(`
+                <div class="reply-form">
+                  <input type="text" class="reply-content" placeholder="返信を入力"/>
+                  <button class="submit-reply" data-id="${id}">送信</button>
+                </div>
+            `);
+            $tweet.append($form);
+        }
     });
     $('#feed').on('click', '.submit-reply', function() {
         const parent_id = $(this).data('id');
@@ -151,7 +207,31 @@ $(document).ready(function () {
             }
         });
     });
+    $('#enable-push').click(async () => {
+        if (await askNotificationPermission()) {
+          try {
+            await subscribePush();   // ← ここで待機する
+            alert('プッシュ通知がオンになりました');
+          } catch (err) {
+            console.error('購読に失敗:', err);
+            alert('プッシュ通知の有効化に失敗しました');
+          }
+        }
+    });
 
+    // 通知がすでに許可されている場合はボタンを非表示
+    if (window.Notification && window.Notification.permission === 'granted') {
+      $('#enable-push').hide();
+    }
+    
+    // Service Worker 登録 (もしまだなら)
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/service-worker.js')
+        .catch(err => alert('SW登録失敗:', err));
+    }
+    if (window.Notification && window.Notification.permission === 'granted') {
+        subscribePush();
+    }
     loadTweets();
     // Poll for new tweets every 10 seconds
     setInterval(loadTweets, 10000);

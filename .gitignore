@@ -2,3 +2,5 @@ db/tweets.db
 static/uploads/*
 ssl/*
 .vscode/*
+*.pem
+nohup.out

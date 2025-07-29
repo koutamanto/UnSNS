@@ -1,5 +1,3 @@
-
-
 const CACHE_NAME = 'unsns-cache-v1';
 const URLS_TO_CACHE = [
   '/',

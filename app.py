@@ -6,18 +6,24 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import session, redirect, url_for, flash
 from functools import wraps
 from werkzeug.utils import secure_filename
-import json
+import json, requests
 from pywebpush import webpush, WebPushException
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
+# 環境変数から VAPID キーを取得
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-VAPID_CLAIMS = {"sub": "mailto:your-email@example.com"}
+VAPID_CLAIMS = {"sub": "mailto:katskouta@gmail.com"}
+
+if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
+    raise RuntimeError("VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY が設定されていません")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(BASE_DIR, 'db')
 DB_PATH = os.path.join(DB_DIR, 'tweets.db')
+
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1399229084218691605/FHJwMUhhwd-3p2Xnecqn9ovIveucvcJ-QRSufLmkoEC6pjhiQ99Wi-lx_3qZ2EbZ2paB"
 
 # Ensure db directory exists
 os.makedirs(DB_DIR, exist_ok=True)
@@ -89,6 +95,20 @@ conn.execute('''
 conn.commit()
 conn.close()
 
+# Remove any existing duplicate subscriptions, keeping the first entry per endpoint
+conn = sqlite3.connect(DB_PATH)
+conn.execute('''
+    DELETE FROM subscriptions
+    WHERE id NOT IN (
+        SELECT MIN(id) FROM subscriptions GROUP BY endpoint
+    )
+''')
+conn.commit()
+# Enforce unique constraint on endpoint to prevent future duplicates
+conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_endpoint ON subscriptions(endpoint)')
+conn.commit()
+conn.close()
+
 # Create tweet likes table
 conn = sqlite3.connect(DB_PATH)
 conn.execute('''
@@ -127,7 +147,7 @@ def send_push_notification(data):
                 },
                 data=json.dumps(data),
                 vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_public_key=VAPID_PUBLIC_KEY,
+                # vapid_public_key=VAPID_PUBLIC_KEY,
                 vapid_claims=VAPID_CLAIMS
             )
         except WebPushException as ex:
@@ -148,7 +168,15 @@ def login_required(f):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    avatar = None
+    if 'user_id' in session:
+        c = get_db_connection()
+        row = c.execute('SELECT avatar FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+        avatar = row['avatar']
+        c.close()
+    return render_template('index.html',
+                           avatar=avatar,
+                           vapid_public_key=VAPID_PUBLIC_KEY)
 
 @app.route('/api/tweets', methods=['GET'])
 def get_tweets():
@@ -183,37 +211,50 @@ def get_tweets():
 def post_tweet():
     if 'user_id' not in session:
         return jsonify({'error': 'ログインが必要です'}), 401
+
+    # マルチパートの場合
     if request.content_type.startswith('multipart/form-data'):
         content = request.form.get('content','').strip()
         image_file = request.files.get('image')
+        filename = None  # ここで初期化
         if image_file:
             if image_file.mimetype.startswith('image/') and allowed_file(image_file.filename):
                 filename = secure_filename(f"{session['user_id']}_{int(datetime.utcnow().timestamp())}_{image_file.filename}")
                 image_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             else:
                 return jsonify({'error': '画像ファイルのみアップロード可能です'}), 400
+    # JSON（画像なし）の場合
     else:
         data = request.get_json()
         content = data.get('content','').strip()
-        image_file = None
         filename = None
+
     if not content:
         return jsonify({'error': 'Empty content'}), 400
-    parent_id = request.form.get('parent_id') if request.content_type.startswith('multipart/form-data') else data.get('parent_id')
+
+    parent_id = (request.form.get('parent_id') 
+                 if request.content_type.startswith('multipart/form-data') 
+                 else data.get('parent_id'))
+
     timestamp = datetime.utcnow().isoformat() + 'Z'
-    if request.content_type.startswith('multipart/form-data'):
-        # filename already set above if image_file exists and valid
-        pass
-    else:
-        filename = None
+
     conn = get_db_connection()
     conn.execute(
         'INSERT INTO tweets (content, timestamp, user_id, parent_id, image) VALUES (?, ?, ?, ?, ?)',
         (content, timestamp, session['user_id'], parent_id, filename)
     )
     conn.commit()
-    # send browser push notification
     send_push_notification({"title": "UnSNS", "body": content})
+    try:
+        webhook_payload = {
+            "content": f"{session.get('username')} さんが新しい投稿をしました:\n{content}"
+        }
+        # 添付画像があれば画像URLも含める
+        if filename:
+            webhook_payload["content"] += f"\nhttps://unsns.katskouta.one/static/uploads/{filename}"
+        requests.post(DISCORD_WEBHOOK_URL, json=webhook_payload)
+    except Exception as e:
+        print(f"Discord webhook failed: {e}")
     conn.close()
     return jsonify({'content': content, 'timestamp': timestamp, 'image': filename}), 201
 
@@ -324,11 +365,17 @@ def home():
 def subscribe():
     sub = request.get_json()
     conn = get_db_connection()
-    conn.execute(
-        'INSERT INTO subscriptions (endpoint, p256dh, auth) VALUES (?, ?, ?)',
-        (sub["endpoint"], sub["keys"]["p256dh"], sub["keys"]["auth"])
-    )
-    conn.commit()
+    # 既存の購読情報がなければ挿入
+    exists = conn.execute(
+        'SELECT 1 FROM subscriptions WHERE endpoint = ?',
+        (sub["endpoint"],)
+    ).fetchone()
+    if not exists:
+        conn.execute(
+            'INSERT INTO subscriptions (endpoint, p256dh, auth) VALUES (?, ?, ?)',
+            (sub["endpoint"], sub["keys"]["p256dh"], sub["keys"]["auth"])
+        )
+        conn.commit()
     conn.close()
     return '', 201
 

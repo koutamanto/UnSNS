@@ -8,9 +8,14 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1da1f2">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      // サーバーから渡された VAPID 公開鍵
+      const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
+    </script>
 </head>
 <body>
     <header>
@@ -31,6 +36,7 @@
             <textarea id="tweet-content" placeholder="いまどうしてる？"></textarea>
             <input type="file" id="tweet-image" accept="image/*">
             <button id="tweet-button">投稿</button>
+            <button id="enable-push">プッシュ通知を有効にする</button>
         </section>
         <section class="feed" id="feed">
             <!-- Tweets will be appended here -->

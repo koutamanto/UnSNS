@@ -17,36 +17,57 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
   
-  async function askNotificationPermission() {
-    const result = await window.Notification.requestPermission();
-    if (result !== 'granted') {
-      alert('通知を許可しないとプッシュ通知は届きません');
-      return false;
+async function askNotificationPermission() {
+  const result = await window.Notification.requestPermission();
+  if (result !== 'granted') {
+    alert('通知を許可しないとプッシュ通知は届きません');
+    return false;
+  }
+  return true;
+}
+
+async function subscribePush() {
+  // try {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  const subscription = await registrations[0].pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+  });
+  // alert(subscription);
+  // サーバーへ購読情報を送信
+  fetch('/subscribe', {
+  method: 'POST',
+  headers: {
+      'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(subscription)
+  });
+  console.log('Subscribed to push notifications');
+  // } catch (error) {
+  //   console.error('Failed to subscribe to push notifications', error);
+  // }
+}
+
+// コメント折り畳み機能
+function setupCommentToggle() {
+  $(document).on('click', '.comment-toggle', function(e) {
+    e.preventDefault();
+    const $toggleBtn = $(this);
+    const $commentsContainer = $toggleBtn.next('.comments-container');
+    const $icon = $toggleBtn.find('.comment-toggle-icon');
+    const $text = $toggleBtn.find('.comment-toggle-text');
+    
+    if ($commentsContainer.hasClass('expanded')) {
+      $commentsContainer.removeClass('expanded').addClass('collapsed');
+      $toggleBtn.removeClass('expanded');
+      $text.text('コメントを表示');
+    } else {
+      $commentsContainer.removeClass('collapsed').addClass('expanded');
+      $toggleBtn.addClass('expanded');
+      $text.text('コメントを非表示');
     }
-    return true;
-  }
-  
-  async function subscribePush() {
-    // try {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    const subscription = await registrations[0].pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-    });
-    // alert(subscription);
-    // サーバーへ購読情報を送信
-    fetch('/subscribe', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(subscription)
-    });
-    console.log('Subscribed to push notifications');
-    // } catch (error) {
-    //   console.error('Failed to subscribe to push notifications', error);
-    // }
-  }
+  });
+}
 
 $(document).ready(function () {
     // Track tweets liked by current user in this session
@@ -105,9 +126,27 @@ $(document).ready(function () {
                                   .text('削除')
                             );
                         }
-                        container.append($tweet.append($footer));
-                        // Render replies recursively
-                        if (tweet.replies.length) renderTweets(tweet.replies, container, indent+1);
+                        $tweet.append($footer);
+                        
+                        // 返信がある場合はコメント折り畳み機能を追加
+                        if (tweet.replies.length > 0) {
+                            const $commentToggle = $(`
+                                <button class="comment-toggle">
+                                    <span class="comment-toggle-icon">▶</span>
+                                    <span class="comment-toggle-text">コメントを表示</span>
+                                    <span class="comment-count">(${tweet.replies.length}件)</span>
+                                </button>
+                            `);
+                            const $commentsContainer = $('<div>').addClass('comments-container collapsed');
+                            
+                            $tweet.append($commentToggle);
+                            $tweet.append($commentsContainer);
+                            
+                            // 返信を再帰的にレンダリング（コメントコンテナ内に）
+                            renderTweets(tweet.replies, $commentsContainer, 0);
+                        }
+                        
+                        container.append($tweet);
                     });
                 }
                 $('#feed').empty();
@@ -166,6 +205,7 @@ $(document).ready(function () {
             $tweet.append($form);
         }
     });
+    
     $('#feed').on('click', '.submit-reply', function() {
         const parent_id = $(this).data('id');
         const content = $(this).siblings('.reply-content').val();
@@ -207,6 +247,7 @@ $(document).ready(function () {
             }
         });
     });
+    
     $('#enable-push').click(async () => {
         if (await askNotificationPermission()) {
           try {
@@ -232,7 +273,12 @@ $(document).ready(function () {
     if (window.Notification && window.Notification.permission === 'granted') {
         subscribePush();
     }
+    
+    // コメント折り畳み機能を初期化
+    setupCommentToggle();
+    
     loadTweets();
     // Poll for new tweets every 10 seconds
     setInterval(loadTweets, 10000);
 });
+

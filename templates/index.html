@@ -16,6 +16,53 @@
       // サーバーから渡された VAPID 公開鍵
       const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
     </script>
+    <style>
+      /* コメント折り畳み機能のスタイル */
+      .comment-toggle {
+        background: none;
+        border: none;
+        color: #1da1f2;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 5px 0;
+        margin: 5px 0;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: color 0.2s ease;
+      }
+      
+      .comment-toggle:hover {
+        color: #0d8bd9;
+      }
+      
+      .comment-toggle-icon {
+        transition: transform 0.2s ease;
+        font-size: 12px;
+      }
+      
+      .comment-toggle.expanded .comment-toggle-icon {
+        transform: rotate(90deg);
+      }
+      
+      .comments-container {
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+      
+      .comments-container.collapsed {
+        max-height: 0;
+      }
+      
+      .comments-container.expanded {
+        max-height: 1000px; /* 十分な高さを設定 */
+      }
+      
+      .comment-count {
+        color: #657786;
+        font-size: 14px;
+      }
+    </style>
 </head>
 <body>
     <header>
@@ -118,3 +165,5 @@
     </script>
 </body>
 </html>
+
+

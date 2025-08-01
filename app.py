@@ -12,12 +12,12 @@ from pywebpush import webpush, WebPushException
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 # 環境変数から VAPID キーを取得
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_PUBLIC_KEY = ""#os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_PRIVATE_KEY = "" #os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_CLAIMS = {"sub": "mailto:katskouta@gmail.com"}
 
-if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
-    raise RuntimeError("VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY が設定されていません")
+# if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
+#     raise RuntimeError("VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY が設定されていません")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.path.join(BASE_DIR, 'db')
